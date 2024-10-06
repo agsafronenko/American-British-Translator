@@ -12,61 +12,74 @@ function invertDictionary(dict) {
 }
 
 const britishToAmericanSpelling = invertDictionary(americanToBritishSpelling)
-const britishToAmericanTitles = invertDictionary(americanToBritishTitles)
 
 class Translator {
-    constructor() {
-        this.americanToBritish = [americanOnly, americanToBritishSpelling, americanToBritishTitles]
-        this.britishToAmerican = [britishOnly, britishToAmericanSpelling, britishToAmericanTitles]
+
+    setLocaleConfig(locale) {
+      if (locale === "american-to-british") {
+        this.dicts = [americanOnly, americanToBritishSpelling]
+        this.timeSeparator = ":"
+        this.titlePeriod = "."
+      } else {
+        this.dicts = [britishOnly, britishToAmericanSpelling]
+        this.timeSeparator = "."
+        this.titlePeriod = ""
+      }
     }
 
     translate(text, locale) {
-        let dicts = locale === "american-to-british" ? this.americanToBritish : this.britishToAmerican
-        let tokensArr = text.match(/mrs\.*|ms\.*|mx\.*|dr\.*|prof\.*|\d{1,2}[:\.]\d{2}|[\w']+|[.,!?;:]/gi);
-        let tokensArrTranslated = tokensArr.map(token => {
-          if (/\d{1,2}[:.]\d{2}/.test(token)) {
-            return this.timeTranslation(token, locale)
-          } else {
-            return this.wordTranslation(token, dicts)
-          }
-    })
-        let tokensString = this.makeString(tokensArrTranslated)
-        return text === tokensString ? "Everything looks good to me!" : tokensString
+      this.setLocaleConfig(locale)
+      let translatedText = this.translateTime(text)
+      translatedText = this.translateTitles(translatedText)
+      translatedText = this.translateWords(translatedText)
+
+      return translatedText === text ? "Everything looks good to me!" : translatedText
     }
 
+    translateTime(text) {
+      const timeRegExp = new RegExp(`\\d{1,2}${this.timeSeparator}\\d{2}`, 'g')
+      let time = text.match(timeRegExp)
 
-    timeTranslation(time, locale) {
-      const isAmericanToBritish = locale === "american-to-british" && /:/.test(time);
-      const isBritishToAmerican = locale === "british-to-american" && /\./.test(time);
-      
-      if (isAmericanToBritish || isBritishToAmerican) {
-        const translatedTime = isAmericanToBritish ? time.replace(":", ".") : time.replace(".", ":");
-        return `<span class="highlight">${translatedTime}</span>`;
+      if (!time) return text
+
+      return text.replace(timeRegExp, (match) => {
+        const translatedTime = match.replace(this.timeSeparator, this.timeSeparator === '.' ? ":" : ".")
+        return this.highlight(translatedTime)
+      });
+    }
+
+    translateTitles(text) {
+      const titleRegex = new RegExp(`(?<![a-zA-Z])(${Object.values(americanToBritishTitles).map(t => t + this.titlePeriod).join("|")})`, "gi")
+
+      return text.replace(titleRegex, (match) => this.titlePeriod ? this.highlight(match.replace(".", "")) : this.highlight(match + "."))
+    }
+
+    translateWords(text) {
+      const isCapitalized = this.capitalize(text)[0] === text[0]
+      let textDecapitalized = isCapitalized ? this.decapitalize(text) : text
+
+      for (let dict of this.dicts) {
+        const regex = new RegExp(`\\b(${Object.keys(dict).join('|')})\\b`, 'gi');
+        textDecapitalized = textDecapitalized.replace(regex, (match) => {
+          const replacement = dict[match.toLowerCase()]; 
+          return this.highlight(replacement);
+        });
       }
-      
-      return time;
+
+      return isCapitalized ? this.capitalize(textDecapitalized) : textDecapitalized
     }
 
-    wordTranslation(word, dicts) {
-      const isCapitalized = this.capitalize(word[0]) === word[0]
-      const selectedWord = isCapitalized ? word.toLowerCase() : word
-      for (let dict of dicts) {
-        if (dict.hasOwnProperty(selectedWord)) {
-          let translatedWord = dict[selectedWord]
-          return `<span class="highlight">${isCapitalized ? this.capitalize(translatedWord) : translatedWord}</span>`
-        }
-      }
-        return word
+    decapitalize(text) {
+      return text[0].toLowerCase() + text.slice(1);
     }
 
-    capitalize(word) {
-      return word[0].toUpperCase() + word.slice(1);
+    capitalize(text) {
+      return text[0].toUpperCase() + text.slice(1);
     }
 
-    makeString(arr) {
-      return arr.reduce((acc, word, index) => acc + (/[.,!?;:]$/g.test(word) ? word : (index > 0 ? " " : "") + word), "");
-
-}
+    highlight(translatedPart) {
+      return `<span class="highlight">${translatedPart}</span>`
+    }
 }
 
 module.exports = Translator;
